@@ -1,0 +1,115 @@
+####RRDAP WNS Treatment Field Trial Survival Analysis####
+
+#Install required packages if necessary
+install.packages(c("survival","survminer","readxl"))
+
+#Load required packages
+library(survival)
+library(survminer)
+library(readxl)
+
+#Load data
+WNS_RRDAP_TxTrial <- read_excel("WNS_RRDAP_TxTrial.xlsx", col_types = c("numeric", "numeric", "text",
+                                                                        "text", "text", "numeric", "numeric",
+                                                                        "numeric", "text", "numeric", "text", 
+                                                                        "numeric"))
+View(WNS_RRDAP_TxTrial)
+head(WNS_RRDAP_TxTrial)
+
+#Convert tible to dataframe
+KY <- as.data.frame(WNS_RRDAP_TxTrial)
+
+#T-test conducted within Excel in field to confirm that Mass_start and WingScore_start 
+#These were not signifcantly different before trial start.  So code not here for this analysis.
+
+#Check for normality
+shapiro.test(KY$Mass) #Failed normality
+hist(KY$Mass)  #Can see negatively skewed data
+#Because of weights not recorded for deceased animals, this variable was eliminated from analysis.
+
+#Check for tetrachoric correlation between variables
+data = KY[,c("Sex", "Location")]
+table(data)
+sex_location = matrix(c(5,113,66,163), nrow=2)
+tetrachoric(sex_location)
+######Correlation of -0.6
+
+data = KY[,c("Sex", "TxControl")]
+table(data)
+sex_TxControl = matrix(c(41,132,30,144), nrow=2)
+tetrachoric(sex_TxControl)
+######Correlation of 0.14
+
+data = KY[,c("Location", "TxControl")]
+table(data)
+Location_TxControl = matrix(c(59,114,59,115), nrow=2)
+tetrachoric(Location_TxControl)
+######Correlation of 0.003
+
+
+#Assessing overall surival example code only looking at treatment
+fit.cox1 <- coxph(Surv(Time1, Time2, Event) ~ TxControl, id=Band, model=TRUE, data=KY) #id b/c repeated lines for each indvidial
+fit.cox1a <-coxph(Surv(Time1, Time2, Event) ~ TxControl, model=TRUE, data=KY)  #The data cannot be plotted with ggforest() unless id argement is not included, therefore this code is here so the readers can see the results are identical.
+summary(fit.cox1)
+summary(fit.cox1a)  #Note that id is not needed as all outputs identical, but ggforest() does not plot with id argument present.
+cox.zph(fit.cox1)  #verify proportial hazards met
+
+#Code for models of interest, cannot have Sex and Location together due to binary correlation
+fit.cox2 <- coxph(Surv(Time1, Time2, Event) ~ TxControl + Location + TxControl*Location, id=Band, data=KY)
+summary(fit.cox2)
+cox.zph(fit.cox2)  #Location fails proportional assumptions
+
+fit.cox3 <-coxph(Surv(Time1, Time2, Event) ~ TxControl + Sex + TxControl*Sex, id=Band, model=TRUE, data=KY)
+summary(fit.cox3)
+cox.zph(fit.cox3) 
+
+fit.cox4 <- coxph(Surv(Time1, Time2, Event) ~ TxControl + Sex, model=TRUE, data=KY)
+cox.zph(fit.cox4)
+summary(fit.cox4)
+ggforest(fit.cox4)  #plot cox model
+
+#Code for models of interst based upon a single site instead of overall.
+#First group data by site
+KYBreckenridge <- subset(KY, Location == "Breckenridge")
+head(KYBreckenridge)
+KYRockcastle <-subset(KY, Location == "Rockcastle")
+head(KYRockcastle)
+
+#Breckenridge analysis
+fit.coxB1 <- coxph(Surv(Time1, Time2, Event) ~ TxControl, model=TRUE, data=KYBreckenridge) 
+summary(fit.coxB1)
+cox.zph(fit.coxB1)  #verify proportial hazards met
+
+#Breckenridge analysis
+fit.coxB2 <- coxph(Surv(Time1, Time2, Event) ~ TxControl + Sex + Sex*TxControl, model=TRUE, data=KYBreckenridge) 
+summary(fit.coxB2)
+cox.zph(fit.coxB2)  #verify proportial hazards met, interaction failed
+
+#Breckenridge analysis
+fit.coxB2a <- coxph(Surv(Time1, Time2, Event) ~ TxControl + Sex, model=TRUE, data=KYBreckenridge) 
+summary(fit.coxB2a)
+cox.zph(fit.coxB2a)  #verify proportial hazards met
+
+
+#Rockdale analysis
+fit.coxR1 <- coxph(Surv(Time1, Time2, Event) ~ TxControl, model=TRUE, data=KYRockcastle) 
+summary(fit.coxR1)
+cox.zph(fit.coxR1)  #verify proportial hazards met
+
+#Rockdale analysis
+fit.coxR2 <- coxph(Surv(Time1, Time2, Event) ~ TxControl + Sex + Sex*TxControl, model=TRUE, data=KYRockcastle) 
+summary(fit.coxR2)
+cox.zph(fit.coxR2)  #verify proportial hazards met, eliminate interaction as doesn't contribute
+
+#Rockdale analysis
+fit.coxR3 <- coxph(Surv(Time1, Time2, Event) ~ TxControl + Sex, model=TRUE, data=KYRockcastle) 
+summary(fit.coxR3)
+cox.zph(fit.coxR3)  #verify proportial hazards met
+ggforest(fit.coxR3) #Tx causes increased risk of mortality
+
+##To plot survival curves
+ggsurvplot(survfit(Surv(Time1, Time2, Event) ~ TxControl, data=KY), conf.int=TRUE, xlim=c(0,122), type="kaplan-meyer", title="Overall Survival of all bats")
+ggsurvplot(survfit(Surv(Time1, Time2, Event) ~ TxControl + Sex, data=KY), conf.int=FALSE, xlim=c(0,122), type="kaplan-meyer", title="Overall Survival of all bats")
+
+ggsurvplot(survfit(Surv(Time1, Time2, Event) ~ TxControl, data=KYBreckenridge), conf.int=TRUE, xlim=c(0,120), type="kaplan-meyer") #Control hidden as same mortality in each
+ggsurvplot(survfit(Surv(Time1, Time2, Event) ~ TxControl, data=KYRockcastle), conf.int=TRUE, xlim=c(0,122), type="kaplan-meyer")

@@ -12,3 +12,5 @@ The raw data is uplaoded as an Excel file which can be imported into R to allow 
 
 The file entitled "StatisticalAnalysis" holds the code which was used
 Raw data and survival analysis R code for manuscript "Contact-independent exposure to Rhodococcus rhodochrous DAP96253 volatiles negatively impacts the survival rate of Myotis lucifugus (little brown bats) affected by White-nose Syndrome"
+
+Release v1.0 [![DOI](https://zenodo.org/badge/538513920.svg)](https://zenodo.org/badge/latestdoi/538513920)

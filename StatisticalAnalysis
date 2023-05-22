@@ -10,9 +10,11 @@ library(readxl)
 
 #Load data
 WNS_RRDAP_TxTrial <- read_excel("WNS_RRDAP_TxTrial.xlsx", col_types = c("numeric", "numeric", "text",
-                                                                        "text", "text", "numeric", "numeric",
-                                                                        "numeric", "text", "numeric", "text", 
-                                                                        "numeric"))
+                                                                        "text", "text", "numeric", "numeric", 
+                                                                        "numeric", "text", "numeric", "text", "numeric"))
+
+
+
 View(WNS_RRDAP_TxTrial)
 head(WNS_RRDAP_TxTrial)
 
@@ -68,7 +70,7 @@ cox.zph(fit.cox4)
 summary(fit.cox4)
 ggforest(fit.cox4)  #plot cox model
 
-#Code for models of interst based upon a single site instead of overall.
+#Code for models of interest based upon a single site instead of overall.
 #First group data by site
 KYBreckenridge <- subset(KY, Location == "Breckenridge")
 head(KYBreckenridge)
@@ -90,6 +92,14 @@ fit.coxB2a <- coxph(Surv(Time1, Time2, Event) ~ TxControl + Sex, model=TRUE, dat
 summary(fit.coxB2a)
 cox.zph(fit.coxB2a)  #verify proportial hazards met
 
+#Breckenridge analysis
+fit.coxB5 <- coxph(Surv(Time1, Time2, Event) ~ TxControl + WingScore_start + Mass_start, model=TRUE, data=KYBreckenridge) 
+summary(fit.coxB5)
+cox.zph(fit.coxB5)  #verify proportial hazards met
+
+fit.coxB6  <- coxph(Surv(Time1, Time2, Event) ~ TxControl + WingScore_fluorescence + Mass_start, model=TRUE, data=KYBreckenridge) 
+summary(fit.coxB6)
+cox.zph(fit.coxB6)
 
 #Rockdale analysis
 fit.coxR1 <- coxph(Surv(Time1, Time2, Event) ~ TxControl, model=TRUE, data=KYRockcastle) 
@@ -107,9 +117,66 @@ summary(fit.coxR3)
 cox.zph(fit.coxR3)  #verify proportial hazards met
 ggforest(fit.coxR3) #Tx causes increased risk of mortality
 
+#Rockcastle analysis
+fit.coxR4 <- coxph(Surv(Time1, Time2, Event) ~ TxControl + Sex + WingScore_start, model=TRUE, data=KYRockcastle) 
+summary(fit.coxR4)
+cox.zph(fit.coxR4)  #verify proportial hazards met
+
+#Rockcastle analysis
+fit.coxR5 <- coxph(Surv(Time1, Time2, Event) ~ TxControl + WingScore_start + Mass_start, model=TRUE, data=KYRockcastle) 
+summary(fit.coxR5)
+cox.zph(fit.coxR5)  #verify proportial hazards met
+
+fit.coxR6  <- coxph(Surv(Time1, Time2, Event) ~ TxControl + WingScore_fluorescence + Mass_start, model=TRUE, data=KYRockcastle) 
+summary(fit.coxR6)
+cox.zph(fit.coxR6)
+
 ##To plot survival curves
 ggsurvplot(survfit(Surv(Time1, Time2, Event) ~ TxControl, data=KY), conf.int=TRUE, xlim=c(0,122), type="kaplan-meyer", title="Overall Survival of all bats")
 ggsurvplot(survfit(Surv(Time1, Time2, Event) ~ TxControl + Sex, data=KY), conf.int=FALSE, xlim=c(0,122), type="kaplan-meyer", title="Overall Survival of all bats")
 
 ggsurvplot(survfit(Surv(Time1, Time2, Event) ~ TxControl, data=KYBreckenridge), conf.int=TRUE, xlim=c(0,120), type="kaplan-meyer") #Control hidden as same mortality in each
 ggsurvplot(survfit(Surv(Time1, Time2, Event) ~ TxControl, data=KYRockcastle), conf.int=TRUE, xlim=c(0,122), type="kaplan-meyer")
+
+###
+#Logistic regression analysis as requested by a reviewer:
+library(stats)
+#install.packages("AICcmodavg")
+library(AICcmodavg)
+#Check for normality of additional variables:
+shapiro.test(logdata$Mass_start)  #passes with transformation
+shapiro.test(log10(logdata$WingScore)) #passes with transformation
+
+#Seperate data by location
+KYB <- subset(logdata, Location == "Breckenridge")
+head(KYB)
+KYRo <-subset(logdata, Location == "Saltpeter")
+head(KYRo)
+
+#Breckenridge logistic regression models:
+log.model.null <- glm(Status ~ 1, data=KYB, family='binomial')
+log.model <- glm(Status ~ TxControl, data = KYB, family = 'binomial')
+log.model2 <- glm(Status ~ TxControl + Mass_start, data=KYB, family='binomial')  #
+log.model3 <- glm(Status ~ TxControl + Mass_start + WingScore, data = KYB, family = 'binomial')
+log.model4 <- glm(Status ~ TxControl + Mass_start + WingScore_fluorescence + Time, data = KYB, family = 'binomial')
+
+#compare models
+models = list(log.model.null, log.model, log.model2, log.model3, log.model4)
+ModelNames = c("Null Model", "TxStatus", "TxStatus+Mass", "TxStatus+Mass+WingScore", "TxStatus+Mass+WingScore+Time")
+aictab(cand.set = models, modnames = ModelNames)
+
+#Rockcastle logistic regression models:
+log.model.nulla <- glm(Status ~ 1, data=KYRo, family='binomial')
+log.modela <- glm(Status ~ TxControl, data = KYRo, family = 'binomial')
+log.model2a <- glm(Status ~ TxControl + Mass_start, data=KYRo, family='binomial')  #
+log.model3a <- glm(Status ~ TxControl + Mass_start + WingScore_fluorescence, data = KYRo, family = 'binomial')
+log.model4a <- glm(Status ~ TxControl + Mass_start + WingScore_fluorescence + Time, data = KYRo, family = 'binomial')
+log.model5a <- glm(Status ~ TxControl + Time, data = KYRo, family = 'binomial')
+
+#compare models
+models = list(log.model.nulla, log.modela, log.model2a, log.model3a, log.model4a, log.model5a)
+ModelNames = c("Null Model", "TxStatus", "TxStatus+Mass", "TxStatus+Mass+WingScore", "TxStatus+Mass+WingScore+Time", "TxStatus+Time")
+aictab(cand.set = models, modnames = ModelNames)
+summary(log.model4a)
+
+exp(cbind(Odds_Ratio = coef(model), confint(model)))

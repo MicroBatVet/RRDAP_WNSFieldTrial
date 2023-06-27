@@ -1,33 +1,58 @@
 ####RRDAP WNS Treatment Field Trial Survival Analysis####
 
 #Install required packages if necessary
-install.packages(c("survival","survminer","readxl"))
+install.packages(c("survival","survminer","readxl", "psych", "tidyverse"))
 
 #Load required packages
-library(survival)
-library(survminer)
-library(readxl)
+library(survival)  #Version ‘3.3.1’
+library(survminer) #Version ‘0.4.9’
+library(readxl)  #Version ‘1.4.0’
+library(psych)  #Version ‘2.3.3’
+library(tidyverse) #Version '2.0.o'
 
 #Load data
-WNS_RRDAP_TxTrial <- read_excel("WNS_RRDAP_TxTrial.xlsx", col_types = c("numeric", "numeric", "text",
+WNS_RRDAP_TxTrial <- read_excel("WNS_RRDAP_TxTrial.xlsx", col_types = c("numeric", "numeric", "text", 
                                                                         "text", "text", "numeric", "numeric", 
-                                                                        "numeric", "text", "numeric", "text", "numeric"))
+                                                                        "numeric", "numeric", "numeric", 
+                                                                        "text", "numeric", "text", "numeric"))
 
 
 
 View(WNS_RRDAP_TxTrial)
 head(WNS_RRDAP_TxTrial)
 
+#Time1 and time2 are the days post exposure when an animal was observed.
+#Species is MYLU or myotis lucifugus
+#Location lists the hibernation site
+#Sex is the sex of the bat
+#Forearm is forearm length in mm
+#Mass is the mass in grams recorded for the bat at the timepoint
+#Mass_start is the mass in grams recorded on day 0 at time of capture.
+#Wingscore is the estimate of the level of P. destructans infection, see manuscript for details.
+#Wingscore fluorescence is the percent fluorescence of the wing as calcualted by CountColor
+#Band is the bat's ID number
+#Status describes if the bat is alive (0) or dead (1)
+#TxControl describes which group the bat was randomly assigned to.
+#Event is another column describing if a bat is alive (1) or dead (2)
+
 #Convert tible to dataframe
 KY <- as.data.frame(WNS_RRDAP_TxTrial)
 
 #T-test conducted within Excel in field to confirm that Mass_start and WingScore_start 
-#These were not signifcantly different before trial start.  So code not here for this analysis.
+#These were not significantly different before trial start.
+#Note that formula used in Excel was =TTEST(array1,array2,2,1) #The 2 for a two-tailed test and 1 for paired samples.
 
-#Check for normality
+#Check for normality to understand data set
 shapiro.test(KY$Mass) #Failed normality
-hist(KY$Mass)  #Can see negatively skewed data
-#Because of weights not recorded for deceased animals, this variable was eliminated from analysis.
+hist(KY$Mass)  #Can see positively skewed data
+#Because of weights not recorded for all deceased animals, this variable was eliminated from analysis.
+
+shapiro.test(KY$Mass_start) #failed normality
+hist(KY$Mass_start) #Negative skewed
+shapiro.test(KY$WingScore_fluorescence) #failed normality
+hist(KY$WingScore_fluorescence)
+shapiro.test(KY$WingScore_start) #failed normality
+hist(KY$WingScore_start)
 
 #Check for tetrachoric correlation between variables
 data = KY[,c("Sex", "Location")]
@@ -47,6 +72,11 @@ table(data)
 Location_TxControl = matrix(c(59,114,59,115), nrow=2)
 tetrachoric(Location_TxControl)
 ######Correlation of 0.003
+
+#Correlations between numeric variables:
+cor.test(KY$Mass_start, KY$WingScore_fluorescence, na.action=na.omit, method = c("spearman"))  #Null hypothesis not rejected
+cor.test(KY$Mass_start, KY$WingScore_start, na.action=na.omit, method = c("spearman"))  #Null hypothesis not rejected
+cor.test(KY$WingScore_start, KY$WingScore_fluorescence, na.action=na.omit, method = c("spearman"))  #Null hypothesis is rejected, these two variables are correlated.
 
 
 #Assessing overall surival example code only looking at treatment
@@ -81,6 +111,7 @@ head(KYRockcastle)
 fit.coxB1 <- coxph(Surv(Time1, Time2, Event) ~ TxControl, model=TRUE, data=KYBreckenridge) 
 summary(fit.coxB1)
 cox.zph(fit.coxB1)  #verify proportial hazards met
+
 
 #Breckenridge analysis
 fit.coxB2 <- coxph(Surv(Time1, Time2, Event) ~ TxControl + Sex + Sex*TxControl, model=TRUE, data=KYBreckenridge) 
@@ -140,22 +171,33 @@ ggsurvplot(survfit(Surv(Time1, Time2, Event) ~ TxControl, data=KYRockcastle), co
 
 ###
 #Logistic regression analysis as requested by a reviewer:
-library(stats)
-#install.packages("AICcmodavg")
-library(AICcmodavg)
-#Check for normality of additional variables:
-shapiro.test(logdata$Mass_start)  #passes with transformation
-shapiro.test(log10(logdata$WingScore)) #passes with transformation
+library(stats) #Version 4.2.0
+#install.packages("AICcmodavg", "stats")
+library(AICcmodavg) #Version 2.3.2
+library(broom) #Version 1.0.5
 
-#Seperate data by location
-KYB <- subset(logdata, Location == "Breckenridge")
+#Import file with only the endpoint of the animal for the logistic regression model
+LogRegression <- read_excel("LogRegression.xlsx", 
+                            col_types = c("numeric", "text", "text", 
+                                          "text", "numeric", "numeric", "numeric", 
+                                          "numeric", "numeric", "text", "numeric", 
+                                          "text", "numeric"))
+View(LogRegression)
+
+#Separate data by location
+KYB <- subset(LogRegression, Location == "Breckenridge")
+KYB <- as.data.frame(KYB)
 head(KYB)
-KYRo <-subset(logdata, Location == "Saltpeter")
+
+KYRo <-subset(LogRegression, Location == "Saltpeter")
+KYRo <- as.data.frame(KYRo)
 head(KYRo)
 
 #Breckenridge logistic regression models:
 log.model.null <- glm(Status ~ 1, data=KYB, family='binomial')
 log.model <- glm(Status ~ TxControl, data = KYB, family = 'binomial')
+
+
 log.model2 <- glm(Status ~ TxControl + Mass_start, data=KYB, family='binomial')  #
 log.model3 <- glm(Status ~ TxControl + Mass_start + WingScore, data = KYB, family = 'binomial')
 log.model4 <- glm(Status ~ TxControl + Mass_start + WingScore_fluorescence + Time, data = KYB, family = 'binomial')
@@ -164,6 +206,52 @@ log.model4 <- glm(Status ~ TxControl + Mass_start + WingScore_fluorescence + Tim
 models = list(log.model.null, log.model, log.model2, log.model3, log.model4)
 ModelNames = c("Null Model", "TxStatus", "TxStatus+Mass", "TxStatus+Mass+WingScore", "TxStatus+Mass+WingScore+Time")
 aictab(cand.set = models, modnames = ModelNames)
+
+#This following code is to make sure predictors are linear
+
+#Predict the probability (p)
+probabilities <- predict(log.model, type = "response")
+predicted.classes <- ifelse(probabilities > 0.5, "pos", "neg")
+head(predicted.classes)
+
+#Select only numeric predictors
+logreg <- KYB %>%
+  dplyr::select_if(is.numeric) 
+predictors <- colnames(KYB)
+
+#Bind the logit and tidying the data for plotting
+logreg <- logreg %>%
+  mutate(logit = log(probabilities/(1-probabilities))) %>%
+  gather(key = "predictors", value = "predictor.value", -logit)
+
+#Calculate the logit probabilities for the model.
+logreg <- logreg %>%
+  mutate(logit = log(probabilities/(1-probabilities)))
+
+#Reshape the data for plotting
+logreg <- tidyr::gather(logreg, key = "predictors", value = "predictor.value", -logit)
+
+#Plot the scatter plot with smoothed lines for each predictor
+ggplot(logreg, aes(logit, predictor.value)) +
+  geom_point(size = 0.5, alpha = 0.5) +
+  geom_smooth(method = "loess") +
+  theme_bw() +
+  facet_wrap(~predictors, scales = "free_y")
+
+#Looking for outlier values in one of the models log.model4.
+logmodel4.data <- augment(log.model4) %>% 
+  mutate(index = 1:n()) 
+
+logmodel4.data %>% top_n(3, .cooksd)  #calculate cooks distance
+
+ggplot(logmodel4.data, aes(index, .std.resid)) + 
+  geom_point(aes(color = Status), alpha = .5) +
+  theme_bw()
+
+logmodel4.data %>% 
+  filter(abs(.std.resid) > 3)  #printout is an empty tibble indicating there are no influential data points.
+#This should be done for each model for Breckenridge as well as Rockcastle.  We have opted to not repeat here for every model.
+
 
 #Rockcastle logistic regression models:
 log.model.nulla <- glm(Status ~ 1, data=KYRo, family='binomial')
@@ -179,4 +267,5 @@ ModelNames = c("Null Model", "TxStatus", "TxStatus+Mass", "TxStatus+Mass+WingSco
 aictab(cand.set = models, modnames = ModelNames)
 summary(log.model4a)
 
-exp(cbind(Odds_Ratio = coef(model), confint(model)))
+#To calculate odds ratio for selected model, use the following code and insert the model name.
+exp(cbind(Odds_Ratio = coef(model_name), confint(model_name)))
